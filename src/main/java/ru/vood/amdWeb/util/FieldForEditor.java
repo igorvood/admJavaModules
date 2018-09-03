@@ -28,23 +28,37 @@ public class FieldForEditor<T> {
 
     private Class<T> type;
 
+    private Map<String, FieldPropertyEditor> fieldPropertyEditorMap;
+
     public FieldForEditor(Class<T> type) {
         this.type = type;
     }
 
     public Map<String, FieldPropertyEditor> getFields() {
+        if (fieldPropertyEditorMap == null) {
+            //final Map<String, FieldForView.FieldPropertyView> fieldsForView = new FieldForView<>(type).getFields();
+            final Map<String, FieldPropertyEditor> fieldsForView = Arrays.stream(this.type.getDeclaredFields())
+                    .filter(field -> field.getAnnotation(Id.class) == null)
+                    .collect(Collectors.toMap(f -> f.getName(), f -> getFieldProperty(f)));
+            HashMap<String, FieldPropertyEditor> mapFields = new HashMap<>();
+            final Map<String, FieldPropertyEditor> currentTypeFields = fieldsForView.entrySet().stream()
+                    .collect(Collectors.toMap(f -> f.getKey(), f1 -> getFieldProperty(f1.getValue().getField())));
+            mapFields.putAll(currentTypeFields);
+            if (type.getSuperclass() != Object.class)
+                mapFields.putAll(new FieldForEditor<>(type.getSuperclass()).getFields());
+            fieldPropertyEditorMap = mapFields;
+        }
+        return fieldPropertyEditorMap;
+    }
 
-        //final Map<String, FieldForView.FieldPropertyView> fieldsForView = new FieldForView<>(type).getFields();
-        final Map<String, FieldPropertyEditor> fieldsForView = Arrays.stream(this.type.getDeclaredFields())
-                .filter(field -> field.getAnnotation(Id.class) == null)
-                .collect(Collectors.toMap(f -> f.getName(), f -> getFieldProperty(f)));
-        HashMap<String, FieldPropertyEditor> mapFields = new HashMap<>();
-        final Map<String, FieldPropertyEditor> currentTypeFields = fieldsForView.entrySet().stream()
-                .collect(Collectors.toMap(f -> f.getKey(), f1 -> getFieldProperty(f1.getValue().getField())));
-        mapFields.putAll(currentTypeFields);
-        if (type.getSuperclass() != Object.class)
-            mapFields.putAll(new FieldForEditor<>(type.getSuperclass()).getFields());
-        return mapFields;
+    public void setListForCombobox(String fieldName, List listForCombobox) {
+        FieldPropertyEditor fieldPropertyEditor = getFields().get(fieldName);
+        if (fieldPropertyEditor.mappedField instanceof ComboBox) {
+            fieldPropertyEditor.dataForComboBox = listForCombobox;
+        } else {
+            throw new ClassCastException("Component is not com.vaadin.flow.component.combobox.ComboBox");
+        }
+
     }
 
     private FieldPropertyEditor getFieldProperty(Field field) {
@@ -154,7 +168,17 @@ public class FieldForEditor<T> {
         private Converter converter;
         private ValueProvider valueProvider;
         private Setter setter;
+        private List dataForComboBox;
 
-        private List dataFromRepo;
+        /**
+         * @param dataForComboBox список объектов для com.vaadin.flow.component.combobox.ComboBox, если сомпонент для
+         *                        поля действительно ComboBox, то вызывается ComboBox.setItems(dataForComboBox)
+         */
+        public void setDataForComboBox(List dataForComboBox) {
+            this.dataForComboBox = dataForComboBox;
+            if (mappedField instanceof ComboBox) {
+                ((ComboBox) mappedField).setItems(dataForComboBox);
+            }
+        }
     }
 }
